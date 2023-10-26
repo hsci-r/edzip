@@ -1,3 +1,4 @@
+from io import IOBase
 import sqlite3
 from zipfile import ZipFile, ZipInfo, ZipExtFile, ZIP_STORED
 from zipfile import _SharedFile, structFileHeader, sizeFileHeader, BadZipFile, _FH_SIGNATURE, stringFileHeader, \
@@ -5,7 +6,7 @@ from zipfile import _SharedFile, structFileHeader, sizeFileHeader, BadZipFile, _
 from stream_unzip import stream_unzip
 import struct
 import os
-from typing import Any, IO, Callable, Generator, Sequence, Union
+from typing import Any, Callable, Generator, Sequence, Union
 
 
 class _SqliteBackedSequence(Sequence):
@@ -48,7 +49,7 @@ class EDZipFile(ZipFile):
     """A subclass of ZipFile that reads the directory information from an external SQLite database.
     """
 
-    def __init__(self, file: Union[str, os.PathLike, IO], con: sqlite3.Connection):
+    def __init__(self, file: Union[str, os.PathLike, IOBase], con: sqlite3.Connection):
         """Initializes a new instance of the class.
 
         Args:
