@@ -139,11 +139,11 @@ class EDZipFile(ZipFile):
             zinfo._decodeExtra()
         return zinfo
 
-    def getinfos(self, names_or_positions: list[Union[str, int]]) -> Generator[ZipInfo, None, None]:
+    def getinfos(self, names_or_positions: Union[list[str],list[int]]) -> Generator[ZipInfo, None, None]:
         """Returns a generator that yields ZipInfo objects for the given list of filenames or positions in the archive list of files.
 
         Args:
-            names_or_positions (list[str or int]): A list of filenames or positions to retrieve ZipInfo objects for.
+            names_or_positions (list[str] or list[int]): A list of filenames or positions to retrieve ZipInfo objects for.
 
         Yields:
             ZipInfo: A ZipInfo object for each filename or position in the input list.
