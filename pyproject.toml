@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "edzip"
-version = "0.1.1"
+version = "0.1.2"
 description = "Library for utilising an external SQLite database as a zip file directory. Useful for random access into zips with extremely many files."
 authors = ["Eetu Mäkelä <eetu.makela@iki.fi>"]
 license = "MIT"

@@ -49,16 +49,23 @@ class EDZipFile(ZipFile):
     """
 
     def __init__(self, file: Union[str, os.PathLike, IO], con: sqlite3.Connection):
-        """
-        Initializes a new instance of the class.
+        """Initializes a new instance of the class.
 
         Args:
-            file (str or os.PathLike or IO): The ZIP file to read from.
+            file (str or os.PathLike or BinaryIO): The ZIP file to read from.
             con (sqlite3.Connection): The SQLite3 database connection to the external directory.
         """
         super().__init__(file, 'r', ZIP_STORED, True, None)
         self._len = con.execute("SELECT COUNT(*) FROM offsets").fetchone()[0]
         self.con = con
+
+    def __len__(self) -> int:
+        """Return the number of items in the EDZip object.
+
+        Returns:
+            int: The number of items in the EDZip object.
+        """
+        return self._len
 
     def _RealGetContents(self):
         pass
@@ -132,8 +139,7 @@ class EDZipFile(ZipFile):
         return zinfo
 
     def getinfos(self, names_or_positions: list[Union[str, int]]) -> Generator[ZipInfo, None, None]:
-        """
-        Returns a generator that yields ZipInfo objects for the given list of filenames or positions in the archive list of files.
+        """Returns a generator that yields ZipInfo objects for the given list of filenames or positions in the archive list of files.
 
         Args:
             names_or_positions (list[str or int]): A list of filenames or positions to retrieve ZipInfo objects for.
@@ -152,8 +158,7 @@ class EDZipFile(ZipFile):
 
     def open(self, name: Union[str, ZipInfo], mode: str = "r", pwd: Union[bytes, None] = None, *,
              force_zip6: bool = False) -> ZipExtFile:
-        """
-        Open the file specified by 'name' inside the ZIP archive for reading.
+        """Open the file specified by 'name' inside the ZIP archive for reading.
 
         Args:
             name (str or ZipInfo): The name of the file to open, or a ZipInfo object.
@@ -179,8 +184,7 @@ class EDZipFile(ZipFile):
 
     def stream_from(self, name: Union[None, str, ZipInfo] = None) -> Generator[
         tuple[str, int, Generator[bytes, None, None]], None, None]:
-        """
-        Returns a generator that yields a tuple of (filename, file size, file data) for each file in the archive, optionally starting with the specified file.
+        """Returns a generator that yields a tuple of (filename, file size, file data) for each file in the archive, optionally starting with the specified file.
 
         Args:
             name (str or ZipInfo): Optional. The name of the file to start streaming from, or a ZipInfo object representing the file.
@@ -199,8 +203,7 @@ class EDZipFile(ZipFile):
 
 
 def create_sqlite_directory_from_zip(zipfile: ZipFile, filename: str) -> sqlite3.Connection:
-    """
-    Creates, from the given ZipFile, an SQLite database compatible with ZipFileWithExternalSqliteDirectory.
+    """Creates, from the given ZipFile, an SQLite database compatible with ZipFileWithExternalSqliteDirectory.
 
     Args:
         zipfile (ZipFile): A ZipFile object
