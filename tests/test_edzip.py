@@ -1,7 +1,6 @@
 from io import BytesIO
 import unittest
 from zipfile import ZipFile, ZipInfo
-from unittest.mock import MagicMock
 
 from edzip import EDZipFile, create_sqlite_directory_from_zip
 
@@ -42,7 +41,9 @@ class TestCreateSqliteDirectoryFromZip(unittest.TestCase):
         self.assertEqual(len(slice), 2)
         self.assertEqual(slice[0], 'test2.txt')
         self.assertEqual(slice[1], 'test3.txt')
-           
+
+    def test_positions(self):
+        self.assertEqual(list(self.edzip_file.getpositions(['test.txt','test3.txt'])), [0, 2])
 
     def test_infolist(self):
         infolist = self.edzip_file.infolist()

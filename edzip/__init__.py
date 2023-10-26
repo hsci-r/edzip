@@ -109,6 +109,19 @@ class EDZipFile(ZipFile):
         (zi.header_offset,) = self.con.execute("SELECT header_offset FROM offsets WHERE filename = ?",
                                                (name,)).fetchone()
         return zi
+    
+    def getpositions(self, names: Sequence[str]) -> Generator[int, None, None]:
+        """Retrieves the positions of the given files in the archive.
+
+        Args:
+            names (Sequence[str]): The names of the files to retrieve positions for.
+
+        Yields:
+            int: The position in the archive for each of the given files.
+        """
+        for row in self.con.execute("SELECT file_number FROM offsets WHERE filename IN (%s)" %
+                                                   ','.join('?' * len(names)), names):
+            yield row[0]
 
     def fillinfo(self, zinfo: ZipInfo) -> ZipInfo:
         """Fill the given ZipInfo object with further information about the file in the archive.
@@ -139,11 +152,11 @@ class EDZipFile(ZipFile):
             zinfo._decodeExtra()
         return zinfo
 
-    def getinfos(self, names_or_positions: Union[list[str],list[int]]) -> Generator[ZipInfo, None, None]:
+    def getinfos(self, names_or_positions: Union[Sequence[str],Sequence[int]]) -> Generator[ZipInfo, None, None]:
         """Returns a generator that yields ZipInfo objects for the given list of filenames or positions in the archive list of files.
 
         Args:
-            names_or_positions (list[str] or list[int]): A list of filenames or positions to retrieve ZipInfo objects for.
+            names_or_positions (Sequence[str] or Sequence[int]): A list of filenames or positions to retrieve ZipInfo objects for.
 
         Yields:
             ZipInfo: A ZipInfo object for each filename or position in the input list.
