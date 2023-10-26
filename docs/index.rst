@@ -6,16 +6,8 @@
 Welcome to edzip's documentation!
 ====================================
 
-.. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+.. automodule:: edzip
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
-   modules
-
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
