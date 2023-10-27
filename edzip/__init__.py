@@ -6,7 +6,7 @@ from zipfile import _SharedFile, structFileHeader, sizeFileHeader, BadZipFile, _
 from stream_unzip import stream_unzip
 import struct
 import os
-from typing import Any, Callable, Generator, Sequence, Union
+from typing import Any, Callable, Generator, Optional, Sequence, Union
 
 
 class _SqliteBackedSequence(Sequence):
@@ -170,7 +170,7 @@ class EDZipFile(ZipFile):
                                           ','.join('?' * len(names_or_positions)), names_or_positions):
                 yield self._tuple_to_zinfo(tuple)
 
-    def open(self, name: Union[str, ZipInfo], mode: str = "r", pwd: Union[bytes, None] = None, *,
+    def open(self, name: Union[str, ZipInfo], mode: str = "r", pwd: Optional[bytes] = None, *,
              force_zip6: bool = False) -> ZipExtFile:
         """Open the file specified by 'name' inside the ZIP archive for reading.
 
@@ -196,7 +196,7 @@ class EDZipFile(ZipFile):
                                self._fpclose, self._lock, lambda: self._writing)
         return ZipExtFile(zef_file, mode, name, pwd, True)
 
-    def stream_from(self, name: Union[None, str, ZipInfo] = None) -> Generator[
+    def stream_from(self, name: Optional[Union[str, ZipInfo]] = None) -> Generator[
         tuple[str, int, Generator[bytes, None, None]], None, None]:
         """Returns a generator that yields a tuple of (filename, file size, file data) for each file in the archive, optionally starting with the specified file.
 
