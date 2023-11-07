@@ -24,19 +24,15 @@ class _SqliteBackedSequence(Sequence):
         if isinstance(index, slice):
             if index.step is not None:
                 raise ValueError("Step not supported")
-            start = index.start
-            if start is None:
-                start = 0
-            limit = index.stop
+            if index.start is None:
+                return [self.conversion(row) for row in self.con.execute(f"SELECT {self.fields} FROM offsets WHERE file_number < ?", (index.stop,)).fetchall()]
             if index.stop is None:
-                limit = -1
-            else:
-                limit = index.stop - start
+                return [self.conversion(row) for row in self.con.execute(f"SELECT {self.fields} FROM offsets WHERE file_number >= ?", (index.start,)).fetchall()]
             return [self.conversion(row) for row in
-                self.con.execute(f"SELECT {self.fields} FROM offsets LIMIT ? OFFSET ?", (limit, start))]
+                self.con.execute(f"SELECT {self.fields} FROM offsets WHERE file_number BETWEEN ? AND ?", (index.start, index.stop - 1)).fetchall()]
         else:
             return self.conversion(
-                self.con.execute(f"SELECT {self.fields} FROM offsets LIMIT 1 OFFSET ?", (index,)).fetchone())
+                self.con.execute(f"SELECT {self.fields} FROM offsets WHERE file_number == ?", (index,)).fetchone())
 
     def __iter__(self):
         return map(self.conversion, self.con.execute(f"SELECT {self.fields} FROM offsets"))
@@ -152,7 +148,7 @@ class EDZipFile(ZipFile):
             zinfo._decodeExtra()
         return zinfo
 
-    def getinfos(self, names_or_positions: Union[Sequence[str],Sequence[int]]) -> Generator[ZipInfo, None, None]:
+    def getinfos(self, names_or_positions: Union[Sequence[str],Sequence[int]]) -> list[ZipInfo]:
         """Returns a generator that yields ZipInfo objects for the given list of filenames or positions in the archive list of files.
 
         Args:
@@ -162,13 +158,9 @@ class EDZipFile(ZipFile):
             ZipInfo: A ZipInfo object for each filename or position in the input list.
         """
         if isinstance(names_or_positions[0], int):
-            for tuple in self.con.execute("SELECT header_offset,filename FROM offsets WHERE file_number IN (%s)" %
-                                          ','.join('?' * len(names_or_positions)), names_or_positions):
-                yield self._tuple_to_zinfo(tuple)
+            return [self._tuple_to_zinfo(tuple) for tuple in self.con.execute("SELECT header_offset,filename FROM offsets WHERE file_number IN (%s)" % ','.join('?' * len(names_or_positions)), names_or_positions).fetchall()]
         else:
-            for tuple in self.con.execute("SELECT header_offset,filename FROM offsets WHERE filename IN (%s)" %
-                                          ','.join('?' * len(names_or_positions)), names_or_positions):
-                yield self._tuple_to_zinfo(tuple)
+            return [self._tuple_to_zinfo(tuple) for tuple in self.con.execute("SELECT header_offset,filename FROM offsets WHERE filename IN (%s)" % ','.join('?' * len(names_or_positions)), names_or_positions).fetchall()]
 
     def open(self, name: Union[str, ZipInfo], mode: str = "r", pwd: Optional[bytes] = None, *,
              force_zip6: bool = False) -> ZipExtFile:
