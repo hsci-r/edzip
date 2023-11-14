@@ -88,7 +88,7 @@ class EDZipFile(ZipFile):
                 Note that the ZipInfo objects returned have only offset info filled in.
                 To get all info, call fillinfo() with each object.
         """
-        return _SqliteBackedSequence(self.con, "header_offset,compress_size,filename", self._len, self._tuple_to_zinfo)
+        return _SqliteBackedSequence(self.con, "header_offset,compressed_size,filename", self._len, self._tuple_to_zinfo)
 
     def getinfo(self, name) -> ZipInfo:
         """Retrieves information about a file in the archive.
@@ -102,7 +102,7 @@ class EDZipFile(ZipFile):
                 To get all info, call fillinfo() with it.
         """
         zi = ZipInfo(name)
-        (zi.header_offset,zi.compress_size) = self.con.execute("SELECT header_offset,compress_size FROM offsets WHERE filename = ?",
+        (zi.header_offset,zi.compress_size) = self.con.execute("SELECT header_offset,compressed_size FROM offsets WHERE filename = ?",
                                                (name,)).fetchone()
         return zi
     
@@ -158,9 +158,9 @@ class EDZipFile(ZipFile):
             ZipInfo: A ZipInfo object for each filename or position in the input list.
         """
         if isinstance(names_or_positions[0], int):
-            return [self._tuple_to_zinfo(tuple) for tuple in self.con.execute("SELECT header_offset,compress_size,filename FROM offsets WHERE file_number IN (%s)" % ','.join('?' * len(names_or_positions)), names_or_positions).fetchall()]
+            return [self._tuple_to_zinfo(tuple) for tuple in self.con.execute("SELECT header_offset,compressed_size,filename FROM offsets WHERE file_number IN (%s)" % ','.join('?' * len(names_or_positions)), names_or_positions).fetchall()]
         else:
-            return [self._tuple_to_zinfo(tuple) for tuple in self.con.execute("SELECT header_offset,compress_size,filename FROM offsets WHERE filename IN (%s)" % ','.join('?' * len(names_or_positions)), names_or_positions).fetchall()]
+            return [self._tuple_to_zinfo(tuple) for tuple in self.con.execute("SELECT header_offset,compressed_size,filename FROM offsets WHERE filename IN (%s)" % ','.join('?' * len(names_or_positions)), names_or_positions).fetchall()]
 
     def open(self, name: Union[str, ZipInfo], mode: str = "r", pwd: Optional[bytes] = None, *,
              force_zip6: bool = False) -> ZipExtFile:
