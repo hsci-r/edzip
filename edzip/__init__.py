@@ -1,8 +1,7 @@
 from io import IOBase
 import sqlite3
 from zipfile import ZipFile, ZipInfo, ZipExtFile, ZIP_STORED
-from zipfile import _SharedFile, structFileHeader, sizeFileHeader, BadZipFile, _FH_SIGNATURE, stringFileHeader, \
-    _FH_FILENAME_LENGTH, _FH_EXTRA_FIELD_LENGTH
+from zipfile import _SharedFile, structFileHeader, sizeFileHeader, BadZipFile, _FH_SIGNATURE, stringFileHeader, _FH_FILENAME_LENGTH, _FH_EXTRA_FIELD_LENGTH # type: ignore
 from stream_unzip import stream_unzip
 import struct
 import os
@@ -76,7 +75,8 @@ class EDZipFile(ZipFile):
         return _SqliteBackedSequence(self.con, "filename", self._len, lambda x: x[0])
 
     def _tuple_to_zinfo(self, tuple) -> ZipInfo:
-        zi = ZipInfo(tuple[1])
+        zi = ZipInfo(tuple[2])
+        zi.compress_size = tuple[1]
         zi.header_offset = tuple[0]
         return zi
 
@@ -88,7 +88,7 @@ class EDZipFile(ZipFile):
                 Note that the ZipInfo objects returned have only offset info filled in.
                 To get all info, call fillinfo() with each object.
         """
-        return _SqliteBackedSequence(self.con, "header_offset,filename", self._len, self._tuple_to_zinfo)
+        return _SqliteBackedSequence(self.con, "header_offset,compress_size,filename", self._len, self._tuple_to_zinfo)
 
     def getinfo(self, name) -> ZipInfo:
         """Retrieves information about a file in the archive.
@@ -102,7 +102,7 @@ class EDZipFile(ZipFile):
                 To get all info, call fillinfo() with it.
         """
         zi = ZipInfo(name)
-        (zi.header_offset,) = self.con.execute("SELECT header_offset FROM offsets WHERE filename = ?",
+        (zi.header_offset,zi.compress_size) = self.con.execute("SELECT header_offset,compress_size FROM offsets WHERE filename = ?",
                                                (name,)).fetchone()
         return zi
     
@@ -158,9 +158,9 @@ class EDZipFile(ZipFile):
             ZipInfo: A ZipInfo object for each filename or position in the input list.
         """
         if isinstance(names_or_positions[0], int):
-            return [self._tuple_to_zinfo(tuple) for tuple in self.con.execute("SELECT header_offset,filename FROM offsets WHERE file_number IN (%s)" % ','.join('?' * len(names_or_positions)), names_or_positions).fetchall()]
+            return [self._tuple_to_zinfo(tuple) for tuple in self.con.execute("SELECT header_offset,compress_size,filename FROM offsets WHERE file_number IN (%s)" % ','.join('?' * len(names_or_positions)), names_or_positions).fetchall()]
         else:
-            return [self._tuple_to_zinfo(tuple) for tuple in self.con.execute("SELECT header_offset,filename FROM offsets WHERE filename IN (%s)" % ','.join('?' * len(names_or_positions)), names_or_positions).fetchall()]
+            return [self._tuple_to_zinfo(tuple) for tuple in self.con.execute("SELECT header_offset,compress_size,filename FROM offsets WHERE filename IN (%s)" % ','.join('?' * len(names_or_positions)), names_or_positions).fetchall()]
 
     def open(self, name: Union[str, ZipInfo], mode: str = "r", pwd: Optional[bytes] = None, *,
              force_zip6: bool = False) -> ZipExtFile:
@@ -207,6 +207,14 @@ class EDZipFile(ZipFile):
             self.fp.seek(0)
         return stream_unzip(self.fp)
 
+def create_sqlite_table(con: sqlite3.Connection):
+    con.execute("CREATE TABLE offsets (file_number INTEGER PRIMARY KEY, filename TEXT, header_offset INTEGER, compressed_size INTEGER)")
+
+def create_sqlite_indexes(con: sqlite3.Connection):
+    con.execute("CREATE UNIQUE INDEX idx_offsets_filename ON offsets (filename)")
+
+def insert_zipinfo_into_sqlite(con: sqlite3.Connection, file_number: int, filename: str, header_offset: int, compressed_size: int):
+    con.execute("INSERT INTO offsets (file_number, filename, header_offset, compressed_size) VALUES (?,?,?,?)", (file_number, filename, header_offset, compressed_size))
 
 def create_sqlite_directory_from_zip(zipfile: ZipFile, filename: str) -> sqlite3.Connection:
     """Creates, from the given ZipFile, an SQLite database compatible with ZipFileWithExternalSqliteDirectory.
@@ -222,14 +230,15 @@ def create_sqlite_directory_from_zip(zipfile: ZipFile, filename: str) -> sqlite3
         os.remove(filename)
     con = sqlite3.connect(filename)
     with con:
-        con.execute("CREATE TABLE offsets (file_number INTEGER PRIMARY KEY, filename TEXT, header_offset INTEGER)")
-        con.execute("CREATE UNIQUE INDEX idx_offsets_filename ON offsets (filename)")
+        create_sqlite_table(con)
     with con:
         for i, zinfo in enumerate(zipfile.infolist()):
-            con.execute("INSERT OR REPLACE INTO offsets VALUES (?,?,?)", (i, zinfo.filename, zinfo.header_offset))
+            insert_zipinfo_into_sqlite(con, i, zinfo.filename, zinfo.header_offset, zinfo.compress_size)
+    with con:
+        create_sqlite_indexes(con)
     with con:
         con.execute("VACUUM")
     return con
 
 
-__all__ = ["EDZipFile", "create_sqlite_directory_from_zip"]
+__all__ = ["EDZipFile", "create_sqlite_table", "create_sqlite_indexes", "insert_zipinfo_into_sqlite", "create_sqlite_directory_from_zip"]
