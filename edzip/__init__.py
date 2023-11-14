@@ -211,7 +211,7 @@ def create_sqlite_table(con: sqlite3.Connection):
     con.execute("CREATE TABLE offsets (file_number INTEGER PRIMARY KEY, filename TEXT, header_offset INTEGER, compressed_size INTEGER)")
 
 def create_sqlite_indexes(con: sqlite3.Connection):
-    con.execute("CREATE UNIQUE INDEX idx_offsets_filename ON offsets (filename)")
+    con.execute("CREATE INDEX idx_offsets_filename ON offsets (filename)")
 
 def insert_zipinfo_into_sqlite(con: sqlite3.Connection, file_number: int, filename: str, header_offset: int, compressed_size: int):
     con.execute("INSERT INTO offsets (file_number, filename, header_offset, compressed_size) VALUES (?,?,?,?)", (file_number, filename, header_offset, compressed_size))
