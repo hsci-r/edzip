@@ -2,7 +2,8 @@ from io import BytesIO
 import unittest
 from zipfile import ZipFile, ZipInfo
 
-from edzip import EDZipFile, create_sqlite_directory_from_zip
+from edzip import EDZipFile
+from edzip.sqlite import create_sqlite_directory_from_zip
 
 class TestCreateSqliteDirectoryFromZip(unittest.TestCase):
 
