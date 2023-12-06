@@ -1,59 +1,44 @@
+from abc import ABC, abstractmethod
 from io import IOBase
-import sqlite3
 from zipfile import ZipFile, ZipInfo, ZipExtFile, ZIP_STORED
 from zipfile import _SharedFile, structFileHeader, sizeFileHeader, BadZipFile, _FH_SIGNATURE, stringFileHeader, _FH_FILENAME_LENGTH, _FH_EXTRA_FIELD_LENGTH # type: ignore
 from stream_unzip import stream_unzip
 import struct
 import os
-from typing import Any, Callable, Generator, Optional, Sequence, Union
+from typing import Generator, Optional, Sequence, Union
 
+class ExternalDirectory(ABC):
+    
+    @property
+    @abstractmethod
+    def len(self) -> int:
+        pass
 
-class _SqliteBackedSequence(Sequence):
+    @abstractmethod
+    def namelist(self) -> Sequence[str]:
+        pass
 
-    def __init__(self, con: sqlite3.Connection, fields: str, _len: int, conversion: Callable[[tuple], Any]):
-        self.con = con
-        self.fields = fields
-        self.conversion = conversion
-        self._len = _len
+    @abstractmethod
+    def infolist(self) -> Sequence[ZipInfo]:
+        pass
 
-    def __len__(self):
-        return self._len
-
-    def __getitem__(self, index):
-        if isinstance(index, slice):
-            if index.step is not None:
-                raise ValueError("Step not supported")
-            if index.start is None:
-                return [self.conversion(row) for row in self.con.execute(f"SELECT {self.fields} FROM offsets WHERE file_number < ?", (index.stop,)).fetchall()]
-            if index.stop is None:
-                return [self.conversion(row) for row in self.con.execute(f"SELECT {self.fields} FROM offsets WHERE file_number >= ?", (index.start,)).fetchall()]
-            return [self.conversion(row) for row in
-                self.con.execute(f"SELECT {self.fields} FROM offsets WHERE file_number BETWEEN ? AND ?", (index.start, index.stop - 1)).fetchall()]
-        else:
-            return self.conversion(
-                self.con.execute(f"SELECT {self.fields} FROM offsets WHERE file_number == ?", (index,)).fetchone())
-
-    def __iter__(self):
-        return map(self.conversion, self.con.execute(f"SELECT {self.fields} FROM offsets"))
-
-    def __reversed__(self):
-        return map(self.conversion, self.con.execute(f"SELECT {self.fields} FROM offsets ORDER BY file_number DESC"))
-
+    @abstractmethod
+    def getinfo(self, name: str) -> ZipInfo:
+        pass
 
 class EDZipFile(ZipFile):
     """A subclass of ZipFile that reads the directory information from an external SQLite database.
     """
 
-    def __init__(self, file: Union[str, os.PathLike, IOBase], con: sqlite3.Connection):
+    def __init__(self, file: Union[str, os.PathLike, IOBase], ed: ExternalDirectory):
         """Initializes a new instance of the class.
 
         Args:
             file (str or os.PathLike or BinaryIO): The ZIP file to read from.
             con (sqlite3.Connection): The SQLite3 database connection to the external directory.
         """
-        super().__init__(file, 'r', ZIP_STORED, True, None)
-        self._len = con.execute("SELECT COUNT(*) FROM offsets").fetchone()[0]
-        self.con = con
+        super().__init__(file, 'r', ZIP_STORED, True, None) # type: ignore
+        self.ed = ed
 
     def __len__(self) -> int:
         """Return the number of items in the EDZip object.
@@ -61,7 +46,7 @@ class EDZipFile(ZipFile):
         Returns:
             int: The number of items in the EDZip object.
         """
-        return self._len
+        return self.ed.len
 
     def _RealGetContents(self):
         pass
@@ -72,13 +57,7 @@ class EDZipFile(ZipFile):
         Returns:
             Sequence[str]: A sequence of filenames.
         """
-        return _SqliteBackedSequence(self.con, "filename", self._len, lambda x: x[0])
-
-    def _tuple_to_zinfo(self, tuple) -> ZipInfo:
-        zi = ZipInfo(tuple[2])
-        zi.compress_size = tuple[1]
-        zi.header_offset = tuple[0]
-        return zi
+        return self.ed.namelist()
 
     def infolist(self) -> Sequence[ZipInfo]:
         """Return a sequence of ZipInfo objects for all files in the archive.
@@ -88,7 +67,7 @@ class EDZipFile(ZipFile):
                 Note that the ZipInfo objects returned have only offset info filled in.
                 To get all info, call fillinfo() with each object.
         """
-        return _SqliteBackedSequence(self.con, "header_offset,compressed_size,filename", self._len, self._tuple_to_zinfo)
+        return self.ed.infolist()
 
     def getinfo(self, name) -> ZipInfo:
         """Retrieves information about a file in the archive.
@@ -101,23 +80,7 @@ class EDZipFile(ZipFile):
                 Note that the object returned has only offset info filled in.
                 To get all info, call fillinfo() with it.
         """
-        zi = ZipInfo(name)
-        (zi.header_offset,zi.compress_size) = self.con.execute("SELECT header_offset,compressed_size FROM offsets WHERE filename = ?",
-                                               (name,)).fetchone()
-        return zi
-    
-    def getpositions(self, names: Sequence[str]) -> Generator[int, None, None]:
-        """Retrieves the positions of the given files in the archive.
-
-        Args:
-            names (Sequence[str]): The names of the files to retrieve positions for.
-
-        Yields:
-            int: The position in the archive for each of the given files.
-        """
-        for row in self.con.execute("SELECT file_number FROM offsets WHERE filename IN (%s)" %
-                                                   ','.join('?' * len(names)), names):
-            yield row[0]
+        return self.ed.getinfo(name)
 
     def fillinfo(self, zinfo: ZipInfo) -> ZipInfo:
         """Fill the given ZipInfo object with further information about the file in the archive.
@@ -147,20 +110,6 @@ class EDZipFile(ZipFile):
             zinfo.extra = self.fp.read(fheader[_FH_EXTRA_FIELD_LENGTH])
             zinfo._decodeExtra()
         return zinfo
-
-    def getinfos(self, names_or_positions: Union[Sequence[str],Sequence[int]]) -> list[ZipInfo]:
-        """Returns a generator that yields ZipInfo objects for the given list of filenames or positions in the archive list of files.
-
-        Args:
-            names_or_positions (Sequence[str] or Sequence[int]): A list of filenames or positions to retrieve ZipInfo objects for.
-
-        Yields:
-            ZipInfo: A ZipInfo object for each filename or position in the input list.
-        """
-        if isinstance(names_or_positions[0], int):
-            return [self._tuple_to_zinfo(tuple) for tuple in self.con.execute("SELECT header_offset,compressed_size,filename FROM offsets WHERE file_number IN (%s)" % ','.join('?' * len(names_or_positions)), names_or_positions).fetchall()]
-        else:
-            return [self._tuple_to_zinfo(tuple) for tuple in self.con.execute("SELECT header_offset,compressed_size,filename FROM offsets WHERE filename IN (%s)" % ','.join('?' * len(names_or_positions)), names_or_positions).fetchall()]
 
     def open(self, name: Union[str, ZipInfo], mode: str = "r", pwd: Optional[bytes] = None, *,
              force_zip6: bool = False) -> ZipExtFile:

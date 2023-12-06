@@ -3,7 +3,7 @@ import unittest
 from zipfile import ZipFile, ZipInfo
 
 from edzip import EDZipFile
-from edzip.sqlite import create_sqlite_directory_from_zip
+from edzip.sqlite import SQLiteExternalDirectory, create_sqlite_directory_from_zip
 
 class TestCreateSqliteDirectoryFromZip(unittest.TestCase):
 
@@ -15,7 +15,7 @@ class TestCreateSqliteDirectoryFromZip(unittest.TestCase):
             zf.writestr("test3.txt", "Goodbye!")
             con = create_sqlite_directory_from_zip(zf, ":memory:")
         self.zip_file = ZipFile(buffer, 'r')
-        self.edzip_file = EDZipFile(buffer, con)
+        self.edzip_file = EDZipFile(buffer, SQLiteExternalDirectory(con))
 
     def tearDown(self):
         self.edzip_file.close()
@@ -43,9 +43,6 @@ class TestCreateSqliteDirectoryFromZip(unittest.TestCase):
         self.assertEqual(slice[0], 'test2.txt')
         self.assertEqual(slice[1], 'test3.txt')
 
-    def test_positions(self):
-        self.assertEqual(list(self.edzip_file.getpositions(['test.txt','test3.txt'])), [0, 2])
-
     def test_infolist(self):
         infolist = self.edzip_file.infolist()
         self.assertEqual(len(infolist), 3)
@@ -62,26 +59,6 @@ class TestCreateSqliteDirectoryFromZip(unittest.TestCase):
         self.assertIsInstance(info, ZipInfo)
         self.assertEqual(info.filename, "test2.txt")
         self.assertGreater(info.header_offset, 0)
-
-    def test_getinfos_by_name(self):
-        infos = list(self.edzip_file.getinfos(["test.txt", "test3.txt"]))
-        self.assertEqual(len(infos), 2)
-        self.assertIsInstance(infos[0], ZipInfo)
-        self.assertEqual(infos[0].filename, "test.txt")
-        self.assertEqual(infos[0].header_offset, 0)
-        self.assertIsInstance(infos[1], ZipInfo)
-        self.assertEqual(infos[1].filename, "test3.txt")
-        self.assertGreater(infos[1].header_offset,infos[0].header_offset)
-
-    def test_getinfos_by_position(self):
-        infos = list(self.edzip_file.getinfos([1, 2]))
-        self.assertEqual(len(infos), 2)
-        self.assertIsInstance(infos[0], ZipInfo)
-        self.assertEqual(infos[0].filename, "test2.txt")
-        self.assertGreater(infos[0].header_offset, 0)
-        self.assertIsInstance(infos[1], ZipInfo)
-        self.assertEqual(infos[1].filename, "test3.txt")
-        self.assertGreater(infos[1].header_offset,infos[0].header_offset)
 
     def test_open(self):
         with self.edzip_file.open("test2.txt") as f:
